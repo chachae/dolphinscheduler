@@ -192,6 +192,7 @@ public class HeartBeat {
 
     /**
      * update server state
+     * 依据cpu，内存，磁盘判断服务可用性，更新服务状态
      */
     public void updateServerState() {
         this.reportTime = System.currentTimeMillis();
@@ -211,6 +212,7 @@ public class HeartBeat {
      * encode heartbeat
      */
     public String encodeHeartBeat() {
+        // 获取、更新系统硬件信息
         this.fillSystemInfo();
         this.updateServerState();
 

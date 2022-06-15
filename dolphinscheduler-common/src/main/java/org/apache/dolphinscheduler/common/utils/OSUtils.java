@@ -17,35 +17,24 @@
 
 package org.apache.dolphinscheduler.common.utils;
 
-import org.apache.dolphinscheduler.common.shell.ShellExecutor;
-
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang.SystemUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.dolphinscheduler.common.shell.ShellExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import oshi.SystemInfo;
+import oshi.hardware.CentralProcessor;
+import oshi.hardware.GlobalMemory;
+import oshi.hardware.HardwareAbstractionLayer;
 
-import java.io.BufferedReader;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.File;
+import java.io.*;
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
 import java.lang.management.RuntimeMXBean;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.StringTokenizer;
+import java.util.*;
 import java.util.regex.Pattern;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import oshi.SystemInfo;
-import oshi.hardware.CentralProcessor;
-import oshi.hardware.GlobalMemory;
-import oshi.hardware.HardwareAbstractionLayer;
 
 /**
  * os utils
@@ -54,6 +43,7 @@ public class OSUtils {
 
     private static final Logger logger = LoggerFactory.getLogger(OSUtils.class);
 
+    // https://blog.csdn.net/allway2/article/details/124844898 系统硬件库
     private static final SystemInfo SI = new SystemInfo();
     public static final String TWO_DECIMAL = "0.00";
 
@@ -160,7 +150,7 @@ public class OSUtils {
         long now = System.currentTimeMillis();
         if (now - prevTickTime > 950) {
             // Enough time has elapsed.
-            cpuUsage =  processor.getSystemCpuLoadBetweenTicks(prevTicks);
+            cpuUsage = processor.getSystemCpuLoadBetweenTicks(prevTicks);
             prevTickTime = System.currentTimeMillis();
             prevTicks = processor.getSystemCpuLoadTicks();
         }
@@ -273,12 +263,12 @@ public class OSUtils {
      * @return boolean
      */
     public static boolean existTenantCodeInLinux(String tenantCode) {
-        try{
-            String result = exeCmd("id "+ tenantCode);
-            if (!StringUtils.isEmpty(result)){
+        try {
+            String result = exeCmd("id " + tenantCode);
+            if (!StringUtils.isEmpty(result)) {
                 return result.contains("uid=");
             }
-        }catch (Exception e){
+        } catch (Exception e) {
             //because ShellExecutor method throws exception to the linux return status is not 0
             //not exist user return status is 1
             logger.error(e.getMessage(), e);
@@ -331,7 +321,7 @@ public class OSUtils {
     /**
      * create linux user
      *
-     * @param userName user name
+     * @param userName  user name
      * @param userGroup user group
      * @throws IOException in case of an I/O error
      */
@@ -345,7 +335,7 @@ public class OSUtils {
     /**
      * create mac user (Supports Mac OSX 10.10+)
      *
-     * @param userName user name
+     * @param userName  user name
      * @param userGroup user group
      * @throws IOException in case of an I/O error
      */
@@ -364,7 +354,7 @@ public class OSUtils {
     /**
      * create windows user
      *
-     * @param userName user name
+     * @param userName  user name
      * @param userGroup user group
      * @throws IOException in case of an I/O error
      */
@@ -412,7 +402,7 @@ public class OSUtils {
      * get sudo command
      *
      * @param tenantCode tenantCode
-     * @param command command
+     * @param command    command
      * @return result of sudo execute command
      */
     public static String getSudoCmd(String tenantCode, String command) {
@@ -462,7 +452,7 @@ public class OSUtils {
     /**
      * check memory and cpu usage
      *
-     * @param maxCpuloadAvg maxCpuloadAvg
+     * @param maxCpuloadAvg  maxCpuloadAvg
      * @param reservedMemory reservedMemory
      * @return check memory and cpu usage
      */

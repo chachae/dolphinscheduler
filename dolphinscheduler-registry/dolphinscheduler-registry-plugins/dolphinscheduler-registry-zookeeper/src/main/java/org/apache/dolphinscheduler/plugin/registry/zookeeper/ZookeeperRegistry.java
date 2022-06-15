@@ -17,14 +17,7 @@
 
 package org.apache.dolphinscheduler.plugin.registry.zookeeper;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-
-import org.apache.dolphinscheduler.registry.api.ConnectionListener;
-import org.apache.dolphinscheduler.registry.api.Event;
-import org.apache.dolphinscheduler.registry.api.Registry;
-import org.apache.dolphinscheduler.registry.api.RegistryException;
-import org.apache.dolphinscheduler.registry.api.SubscribeListener;
-
+import com.google.common.base.Strings;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.api.ACLProvider;
@@ -34,11 +27,15 @@ import org.apache.curator.framework.recipes.cache.TreeCacheEvent;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.utils.CloseableUtils;
+import org.apache.dolphinscheduler.registry.api.*;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.data.ACL;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Comparator;
@@ -47,13 +44,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javax.annotation.PostConstruct;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
-
-import com.google.common.base.Strings;
-
+/**
+ * zk 节点注册实现
+ */
 @Component
 @ConditionalOnProperty(prefix = "registry", name = "type", havingValue = "zookeeper")
 public final class ZookeeperRegistry implements Registry {
@@ -68,17 +63,17 @@ public final class ZookeeperRegistry implements Registry {
         properties = registryProperties.getZookeeper();
 
         final ExponentialBackoffRetry retryPolicy = new ExponentialBackoffRetry(
-            (int) properties.getRetryPolicy().getBaseSleepTime().toMillis(),
-            properties.getRetryPolicy().getMaxRetries(),
-            (int) properties.getRetryPolicy().getMaxSleep().toMillis());
+                (int) properties.getRetryPolicy().getBaseSleepTime().toMillis(),
+                properties.getRetryPolicy().getMaxRetries(),
+                (int) properties.getRetryPolicy().getMaxSleep().toMillis());
 
         CuratorFrameworkFactory.Builder builder =
-            CuratorFrameworkFactory.builder()
-                                   .connectString(properties.getConnectString())
-                                   .retryPolicy(retryPolicy)
-                                   .namespace(properties.getNamespace())
-                                   .sessionTimeoutMs((int) properties.getSessionTimeout().toMillis())
-                                   .connectionTimeoutMs((int) properties.getConnectionTimeout().toMillis());
+                CuratorFrameworkFactory.builder()
+                        .connectString(properties.getConnectString())
+                        .retryPolicy(retryPolicy)
+                        .namespace(properties.getNamespace())
+                        .sessionTimeoutMs((int) properties.getSessionTimeout().toMillis())
+                        .connectionTimeoutMs((int) properties.getConnectionTimeout().toMillis());
 
         final String digest = properties.getDigest();
         if (!Strings.isNullOrEmpty(digest)) {
@@ -89,17 +84,17 @@ public final class ZookeeperRegistry implements Registry {
 
     private void buildDigest(CuratorFrameworkFactory.Builder builder, String digest) {
         builder.authorization("digest", digest.getBytes(StandardCharsets.UTF_8))
-               .aclProvider(new ACLProvider() {
-                   @Override
-                   public List<ACL> getDefaultAcl() {
-                       return ZooDefs.Ids.CREATOR_ALL_ACL;
-                   }
+                .aclProvider(new ACLProvider() {
+                    @Override
+                    public List<ACL> getDefaultAcl() {
+                        return ZooDefs.Ids.CREATOR_ALL_ACL;
+                    }
 
-                   @Override
-                   public List<ACL> getAclForPath(final String path) {
-                       return ZooDefs.Ids.CREATOR_ALL_ACL;
-                   }
-               });
+                    @Override
+                    public List<ACL> getAclForPath(final String path) {
+                        return ZooDefs.Ids.CREATOR_ALL_ACL;
+                    }
+                });
     }
 
     @PostConstruct
@@ -122,7 +117,7 @@ public final class ZookeeperRegistry implements Registry {
 
     @Override
     public boolean subscribe(String path, SubscribeListener listener) {
-        final TreeCache treeCache = treeCacheMap.computeIfAbsent(path, $ -> new TreeCache(client, path));
+        final TreeCache treeCache = treeCacheMap.computeIfAbsent(path, x -> new TreeCache(client, path));
         treeCache.getListenable().addListener(($, event) -> listener.notify(new EventAdaptor(event, path)));
         try {
             treeCache.start();
@@ -158,14 +153,15 @@ public final class ZookeeperRegistry implements Registry {
 
     @Override
     public void put(String key, String value, boolean deleteOnDisconnect) {
+        // 临时路径 or 持久路径
         final CreateMode mode = deleteOnDisconnect ? CreateMode.EPHEMERAL : CreateMode.PERSISTENT;
 
         try {
             client.create()
-                  .orSetData()
-                  .creatingParentsIfNeeded()
-                  .withMode(mode)
-                  .forPath(key, value.getBytes(StandardCharsets.UTF_8));
+                    .orSetData()
+                    .creatingParentsIfNeeded()
+                    .withMode(mode)
+                    .forPath(key, value.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             throw new RegistryException("Failed to put registry key: " + key, e);
         }
@@ -185,9 +181,10 @@ public final class ZookeeperRegistry implements Registry {
     @Override
     public void delete(String nodePath) {
         try {
+            // 清除路径
             client.delete()
-                  .deletingChildrenIfNeeded()
-                  .forPath(nodePath);
+                    .deletingChildrenIfNeeded()
+                    .forPath(nodePath);
         } catch (KeeperException.NoNodeException ignored) {
             // Is already deleted or does not exist
         } catch (Exception e) {

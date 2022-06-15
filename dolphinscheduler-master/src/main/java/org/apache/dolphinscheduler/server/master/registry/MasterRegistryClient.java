@@ -17,10 +17,8 @@
 
 package org.apache.dolphinscheduler.server.master.registry;
 
-import static org.apache.dolphinscheduler.common.Constants.REGISTRY_DOLPHINSCHEDULER_MASTERS;
-import static org.apache.dolphinscheduler.common.Constants.REGISTRY_DOLPHINSCHEDULER_NODE;
-import static org.apache.dolphinscheduler.common.Constants.SLEEP_TIME_MILLIS;
-
+import com.google.common.collect.Sets;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.dolphinscheduler.common.Constants;
 import org.apache.dolphinscheduler.common.IStoppable;
 import org.apache.dolphinscheduler.common.enums.NodeType;
@@ -32,20 +30,17 @@ import org.apache.dolphinscheduler.server.master.config.MasterConfig;
 import org.apache.dolphinscheduler.server.master.service.FailoverService;
 import org.apache.dolphinscheduler.server.registry.HeartBeatTask;
 import org.apache.dolphinscheduler.service.registry.RegistryClient;
-
-import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
-import com.google.common.collect.Sets;
+import static org.apache.dolphinscheduler.common.Constants.*;
 
 /**
  * <p>DolphinScheduler master register client, used to connect to registry and hand the registry events.
@@ -94,7 +89,7 @@ public class MasterRegistryClient {
     public void start() {
         try {
             // master registry
-            registry();
+            this.registry();
             registryClient.addConnectionStateListener(new MasterConnectionStateListener(getCurrentNodePath(), registryClient));
             registryClient.subscribe(REGISTRY_DOLPHINSCHEDULER_NODE, new MasterRegistryDataListener());
         } catch (Exception e) {
@@ -115,7 +110,7 @@ public class MasterRegistryClient {
     /**
      * remove master node path
      *
-     * @param path node path
+     * @param path     node path
      * @param nodeType node type
      * @param failover is failover
      */
@@ -186,7 +181,9 @@ public class MasterRegistryClient {
      */
     void registry() {
         logger.info("master node : {} registering to registry center...", masterAddress);
+        // 获取master 路径
         String localNodePath = getCurrentNodePath();
+        // 心跳间隔
         int masterHeartbeatInterval = masterConfig.getHeartbeatInterval();
         HeartBeatTask heartBeatTask = new HeartBeatTask(startupTime,
                 masterConfig.getMaxCpuLoadAvg(),
@@ -195,10 +192,12 @@ public class MasterRegistryClient {
                 Constants.MASTER_TYPE,
                 registryClient);
 
-        // remove before persist
+        // remove before persist （保持当前节点幂等）
         registryClient.remove(localNodePath);
+        // 临时zk 路径，写入服务心跳信息
         registryClient.persistEphemeral(localNodePath, heartBeatTask.getHeartBeatInfo());
 
+        // 判断注册情况，不成功就等待1s 后重新判断直至成功
         while (!registryClient.checkNodeExists(NetUtils.getHost(), NodeType.MASTER)) {
             logger.warn("The current master server node:{} cannot find in registry....", NetUtils.getHost());
             ThreadUtils.sleep(SLEEP_TIME_MILLIS);
@@ -210,6 +209,7 @@ public class MasterRegistryClient {
         // delete dead server
         registryClient.handleDeadServer(Collections.singleton(localNodePath), NodeType.MASTER, Constants.DELETE_OP);
 
+        // 注册心跳检测定时器
         this.heartBeatExecutor.scheduleAtFixedRate(heartBeatTask, 0L, masterHeartbeatInterval, TimeUnit.SECONDS);
         logger.info("master node : {} registry to ZK successfully with heartBeatInterval : {}s", masterAddress, masterHeartbeatInterval);
 
@@ -239,6 +239,7 @@ public class MasterRegistryClient {
 
     /**
      * get local address
+     * eg: ip:port
      */
     private String getLocalAddress() {
         return NetUtils.getAddr(masterConfig.getListenPort());

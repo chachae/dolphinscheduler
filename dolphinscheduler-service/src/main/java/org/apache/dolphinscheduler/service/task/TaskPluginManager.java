@@ -17,8 +17,6 @@
 
 package org.apache.dolphinscheduler.service.task;
 
-import static java.lang.String.format;
-
 import org.apache.dolphinscheduler.common.enums.PluginType;
 import org.apache.dolphinscheduler.dao.PluginDao;
 import org.apache.dolphinscheduler.dao.entity.PluginDefine;
@@ -28,19 +26,14 @@ import org.apache.dolphinscheduler.plugin.task.api.parameters.AbstractParameters
 import org.apache.dolphinscheduler.plugin.task.api.parameters.ParametersNode;
 import org.apache.dolphinscheduler.spi.params.PluginParamsTransfer;
 import org.apache.dolphinscheduler.spi.params.base.PluginParams;
-
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.ServiceLoader;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static java.lang.String.format;
 
 @Component
 public class TaskPluginManager {
@@ -60,6 +53,7 @@ public class TaskPluginManager {
     }
 
     public Map<String, TaskChannel> getTaskChannelMap() {
+        // 不可变
         return Collections.unmodifiableMap(taskChannelMap);
     }
 
@@ -84,9 +78,13 @@ public class TaskPluginManager {
         return taskChannel.parseParameters(parametersNode);
     }
 
+    /**
+     * 安装插件
+     */
     public void installPlugin() {
         final Set<String> names = new HashSet<>();
 
+        // java spi，ServiceLoader 加载所有实现
         ServiceLoader.load(TaskChannelFactory.class).forEach(factory -> {
             final String name = factory.getName();
 
@@ -96,7 +94,7 @@ public class TaskPluginManager {
                 throw new IllegalStateException(format("Duplicate task plugins named '%s'", name));
             }
 
-            loadTaskChannel(factory);
+            this.loadTaskChannel(factory);
 
             logger.info("Registered task plugin: {}", name);
 

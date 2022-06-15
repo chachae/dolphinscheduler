@@ -19,7 +19,9 @@ package org.apache.dolphinscheduler.server.master.service;
 
 import io.micrometer.core.annotation.Counted;
 import io.micrometer.core.annotation.Timed;
-
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.dolphinscheduler.common.Constants;
 import org.apache.dolphinscheduler.common.enums.NodeType;
 import org.apache.dolphinscheduler.common.enums.StateEvent;
@@ -39,21 +41,12 @@ import org.apache.dolphinscheduler.server.master.runner.task.TaskProcessorFactor
 import org.apache.dolphinscheduler.server.utils.ProcessUtils;
 import org.apache.dolphinscheduler.service.process.ProcessService;
 import org.apache.dolphinscheduler.service.registry.RegistryClient;
-
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.time.StopWatch;
-
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 /**
  * failover service
@@ -80,15 +73,14 @@ public class FailoverService {
     @Counted(value = "failover_scheduler_check_task_count")
     @Timed(value = "failover_scheduler_check_task_time", percentiles = {0.5, 0.75, 0.95, 0.99}, histogram = true)
     public void checkMasterFailover() {
-        List<String> hosts = getNeedFailoverMasterServers();
+        List<String> hosts = this.getNeedFailoverMasterServers();
         if (CollectionUtils.isEmpty(hosts)) {
             return;
         }
         LOGGER.info("{} begin to failover hosts:{}", getLocalAddress(), hosts);
 
-        for (String host : hosts) {
-            failoverMasterWithLock(host);
-        }
+        // 故障转移核心
+        hosts.forEach(this::failoverMaster);
     }
 
     /**
@@ -113,7 +105,7 @@ public class FailoverService {
     private void failoverMasterWithLock(String masterHost) {
         String failoverPath = getFailoverLockPath(NodeType.MASTER, masterHost);
         try {
-            registryClient.getLock(failoverPath);
+            boolean lock = registryClient.getLock(failoverPath);
             this.failoverMaster(masterHost);
         } catch (Exception e) {
             LOGGER.error("{} server failover failed, host:{}", NodeType.MASTER, masterHost, e);
@@ -133,8 +125,9 @@ public class FailoverService {
         if (StringUtils.isEmpty(masterHost)) {
             return;
         }
-        Date serverStartupTime = getServerStartupTime(NodeType.MASTER, masterHost);
+        Date serverStartupTime = this.getServerStartupTime(NodeType.MASTER, masterHost);
         StopWatch failoverTimeCost = StopWatch.createStarted();
+        // 从数据库把需要故障转移的实例拿到
         List<ProcessInstance> needFailoverProcessInstanceList = processService.queryNeedFailoverProcessInstances(masterHost);
         LOGGER.info("start master[{}] failover, need to failover process list size:{}", masterHost, needFailoverProcessInstanceList.size());
 
@@ -150,7 +143,7 @@ public class FailoverService {
             List<TaskInstance> validTaskInstanceList = processService.findValidTaskListByProcessId(processInstance.getId());
             for (TaskInstance taskInstance : validTaskInstanceList) {
                 LOGGER.info("failover task instance id: {}, process instance id: {}", taskInstance.getId(), taskInstance.getProcessInstanceId());
-                failoverTaskInstance(processInstance, taskInstance, servers);
+                this.failoverTaskInstance(processInstance, taskInstance, servers);
             }
 
             if (serverStartupTime != null && processInstance.getRestartTime() != null
@@ -194,7 +187,7 @@ public class FailoverService {
                 processInstance = processService.findProcessInstanceDetailById(taskInstance.getProcessInstanceId());
                 if (processInstance == null) {
                     LOGGER.error("failover task instance error, processInstance {} of taskInstance {} is null",
-                        taskInstance.getProcessInstanceId(), taskInstance.getId());
+                            taskInstance.getProcessInstanceId(), taskInstance.getId());
                     continue;
                 }
                 processInstanceCacheMap.put(processInstance.getId(), processInstance);
@@ -217,14 +210,15 @@ public class FailoverService {
      * 1. kill yarn job if run on worker and there are yarn jobs in tasks.
      * 2. change task state from running to need failover.
      * 3. try to notify local master
+     *
      * @param processInstance
      * @param taskInstance
-     * @param servers if failover master, servers container master servers and worker servers; if failover worker, servers contain worker servers.
+     * @param servers         if failover master, servers container master servers and worker servers; if failover worker, servers contain worker servers.
      */
     private void failoverTaskInstance(ProcessInstance processInstance, TaskInstance taskInstance, List<Server> servers) {
         if (processInstance == null) {
             LOGGER.error("failover task instance error, processInstance {} of taskInstance {} is null",
-                taskInstance.getProcessInstanceId(), taskInstance.getId());
+                    taskInstance.getProcessInstanceId(), taskInstance.getId());
             return;
         }
         if (!checkTaskInstanceNeedFailover(servers, taskInstance)) {
@@ -237,9 +231,9 @@ public class FailoverService {
 
         if (!isMasterTask) {
             TaskExecutionContext taskExecutionContext = TaskExecutionContextBuilder.get()
-                .buildTaskInstanceRelatedInfo(taskInstance)
-                .buildProcessInstanceRelatedInfo(processInstance)
-                .create();
+                    .buildTaskInstanceRelatedInfo(taskInstance)
+                    .buildProcessInstanceRelatedInfo(processInstance)
+                    .create();
 
             if (masterConfig.isKillYarnJobWhenTaskFailover()) {
                 // only kill yarn job if exists , the local thread has exited
@@ -285,8 +279,8 @@ public class FailoverService {
     /**
      * task needs failover if task start before server starts
      *
-     * @param servers servers, can container master servers or worker servers
-     * @param taskInstance  task instance
+     * @param servers      servers, can container master servers or worker servers
+     * @param taskInstance task instance
      * @return true if task instance need fail over
      */
     private boolean checkTaskInstanceNeedFailover(List<Server> servers, TaskInstance taskInstance) {
@@ -322,7 +316,7 @@ public class FailoverService {
     /**
      * check task start after the worker server starts.
      *
-     * @param servers servers, can contain master servers or worker servers
+     * @param servers      servers, can contain master servers or worker servers
      * @param taskInstance task instance
      * @return true if task instance start time after server start date
      */

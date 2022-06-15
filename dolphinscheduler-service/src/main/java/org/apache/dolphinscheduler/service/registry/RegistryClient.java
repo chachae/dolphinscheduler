@@ -17,19 +17,7 @@
 
 package org.apache.dolphinscheduler.service.registry;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static org.apache.dolphinscheduler.common.Constants.ADD_OP;
-import static org.apache.dolphinscheduler.common.Constants.COLON;
-import static org.apache.dolphinscheduler.common.Constants.DELETE_OP;
-import static org.apache.dolphinscheduler.common.Constants.DIVISION_STRING;
-import static org.apache.dolphinscheduler.common.Constants.MASTER_TYPE;
-import static org.apache.dolphinscheduler.common.Constants.REGISTRY_DOLPHINSCHEDULER_DEAD_SERVERS;
-import static org.apache.dolphinscheduler.common.Constants.REGISTRY_DOLPHINSCHEDULER_MASTERS;
-import static org.apache.dolphinscheduler.common.Constants.REGISTRY_DOLPHINSCHEDULER_WORKERS;
-import static org.apache.dolphinscheduler.common.Constants.SINGLE_SLASH;
-import static org.apache.dolphinscheduler.common.Constants.UNDERLINE;
-import static org.apache.dolphinscheduler.common.Constants.WORKER_TYPE;
-
+import com.google.common.base.Strings;
 import org.apache.dolphinscheduler.common.Constants;
 import org.apache.dolphinscheduler.common.IStoppable;
 import org.apache.dolphinscheduler.common.enums.NodeType;
@@ -40,25 +28,18 @@ import org.apache.dolphinscheduler.registry.api.ConnectionListener;
 import org.apache.dolphinscheduler.registry.api.Registry;
 import org.apache.dolphinscheduler.registry.api.RegistryException;
 import org.apache.dolphinscheduler.registry.api.SubscribeListener;
-
-import java.io.IOException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-import javax.annotation.PostConstruct;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.google.common.base.Strings;
+import javax.annotation.PostConstruct;
+import java.io.IOException;
+import java.time.Duration;
+import java.util.*;
+import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static org.apache.dolphinscheduler.common.Constants.*;
 
 @Component
 public class RegistryClient {
@@ -141,9 +122,10 @@ public class RegistryClient {
     }
 
     public boolean checkNodeExists(String host, NodeType nodeType) {
+        // 判断路径注册到zk 是否成功
         return getServerMaps(nodeType, true).keySet()
-                                            .stream()
-                                            .anyMatch(it -> it.contains(host));
+                .stream()
+                .anyMatch(it -> it.contains(host));
     }
 
     public void handleDeadServer(Collection<String> nodes, NodeType nodeType, String opType) {
@@ -294,9 +276,9 @@ public class RegistryClient {
             return serverList;
         }
         return serverList.stream().flatMap(group ->
-            getChildrenKeys(path + SINGLE_SLASH + group)
-                .stream()
-                .map(it -> group + SINGLE_SLASH + it)
+                getChildrenKeys(path + SINGLE_SLASH + group)
+                        .stream()
+                        .map(it -> group + SINGLE_SLASH + it)
         ).collect(Collectors.toList());
     }
 

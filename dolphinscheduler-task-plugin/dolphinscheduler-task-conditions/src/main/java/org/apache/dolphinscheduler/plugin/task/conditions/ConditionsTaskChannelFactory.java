@@ -17,8 +17,7 @@
 
 package org.apache.dolphinscheduler.plugin.task.conditions;
 
-import static org.apache.dolphinscheduler.plugin.task.api.TaskConstants.TASK_TYPE_CONDITIONS;
-
+import com.google.auto.service.AutoService;
 import org.apache.dolphinscheduler.plugin.task.api.TaskChannel;
 import org.apache.dolphinscheduler.plugin.task.api.TaskChannelFactory;
 import org.apache.dolphinscheduler.spi.params.base.ParamsOptions;
@@ -30,8 +29,11 @@ import org.apache.dolphinscheduler.spi.params.radio.RadioParam;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.google.auto.service.AutoService;
+import static org.apache.dolphinscheduler.plugin.task.api.TaskConstants.TASK_TYPE_CONDITIONS;
 
+/**
+ * @AutoService 作用：https://www.cnblogs.com/strongmore/p/13284444.html
+  */
 @AutoService(TaskChannelFactory.class)
 public class ConditionsTaskChannelFactory implements TaskChannelFactory {
     @Override
